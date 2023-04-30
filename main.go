@@ -2,61 +2,19 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+
+	triepkg "dev/trie-implementation/trie"
+
+	"github.com/eiannone/keyboard"
 )
 
-
-type Trie struct {
-	RootNode *Node
-	Words []string
-}
-
-func (t *Trie) AddWord(word string) {
-	node := t.RootNode
-	for i := 0; i < len(word); i++ {
-		isLastChar := i == len(word) - 1
-		char := string(word[i])
-		_, ok := node.Children[char]
-		if (!ok) {
-			// Add new Node if it doesn't exist
-			node.Children[char] = CreateNewNode(char, make(map[string]*Node), isLastChar)
-		}
-		node = node.Children[char]
-	}
-}
-
-func (t *Trie) GetAllWords() {
-	node := t.RootNode
-	for char, childNode := range node.Children {
-		t.GetWord(char, childNode)
-	}
-}
-
-func (t *Trie) GetWord(word string, node *Node) {
-	if node.CompleteWord {
-		t.Words = append(t.Words, word)
-	}
-	for char, childNode := range node.Children {
-		t.GetWord(word + char, childNode)
-	}
-}
-
-type Node struct {
-	Char string
-	Children map[string]*Node
-	CompleteWord bool
-}
-
-func CreateNewNode(char string, children map[string]*Node, completeWord bool) *Node {
-	return &Node{
-		Char:         char,
-		Children:     children,
-		CompleteWord: completeWord,
-	}
-}
+var IsLetter = regexp.MustCompile(`^[a-zA-Z]+$`).MatchString
 
 func main()  {
-	trie := new(Trie)
-	trie.RootNode = CreateNewNode("*", make(map[string]*Node), true)
+	trie := new(triepkg.Trie)
+	trie.RootNode = triepkg.CreateNewNode("*", make(map[string]*triepkg.Node), true)
 	trie.Words = make([]string, 2)
 	trie.AddWord("car")
 	trie.AddWord("card")
@@ -72,36 +30,47 @@ func main()  {
 	trie.AddWord("monster")
 	trie.AddWord("minefield")
 
+	keysEvents, err := keyboard.GetKeys(10)
+	if err != nil {
+        panic(err)
+    }
+    defer func() {
+        _ = keyboard.Close()
+    }()
+
+	fmt.Println("Press ESC to quit")
 	trie.GetAllWords()
-	// trie.GetWord("c", trie.RootNode.Children["c"])
-	fmt.Println(trie.Words)
-
-	// TODO: Add keyboard autocomplete for the above words.
-
-	// keysEvents, err := keyboard.GetKeys(10)
-	// if err != nil {
-    //     panic(err)
-    // }
-    // defer func() {
-    //     _ = keyboard.Close()
-    // }()
-
-	// fmt.Println("Press ESC to quit")
-    // for {
-    //     event := <-keysEvents
-    //     if event.Err != nil {
-    //         panic(event.Err)
-    //     }
-    //     fmt.Printf("You pressed: rune %q, key %X\r\n", event.Rune, event.Key)
-    //     if event.Key == keyboard.KeyEsc {
-    //         break
-    //     }
-	// 	char := string(event.Rune)
-	// 	hasChild := node.HasChild(char)
-	// 	if (hasChild) {
-	// 		result := GetWords(node.GetChildNode(char))
-	// 		fmt.Printf("Result: %s", result)
-	// 	}
-    // }
+	fmt.Println("All options: ", strings.Join(trie.Words, ", "))
+	chars := make([]string, 0, 100)
+    for {
+        event := <-keysEvents
+        if event.Err != nil {
+            panic(event.Err)
+        }
+        if event.Key == keyboard.KeyEsc {
+            break
+        }
+		if event.Key == keyboard.KeyBackspace2 {
+			if len(chars) > 1 {
+				chars = chars[:len(chars)-1]
+				trie.ResetWords()
+			}
+			// TODO: handle backspacing until there are no letters
+		}
+		if IsLetter(string(event.Rune)) {
+			chars = append(chars, string(event.Rune))
+			trie.ResetWords()
+		}
+		hasAllChars := trie.HasAllChars(chars)
+		if hasAllChars {
+			word := strings.Join(chars, "")
+			node := trie.RootNode.Children[chars[0]].GetChildNode(word)
+			trie.GetWord(word, node)
+		}
+		// TODO: figure out way to more elegantly print the autocomplete options (maybe with colours)
+		fmt.Println(strings.Join(chars, ""), "\n Autocomplete options: ", strings.Join(trie.Words, ", "))
+    }
 }
+
+
 
